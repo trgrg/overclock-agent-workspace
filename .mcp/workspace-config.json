@@ -1,1 +1,31 @@
-
+{
+  "workspaceName": "agentic-backend-core",
+  "mcpVersion": "2026.4.0",
+  "routingEngine": "mimo-v-pro-endpoint",
+  "orchestration": {
+    "supervisorModel": "claude-3-7-opus",
+    "workerPoolSize": 4,
+    "allowParallelExecution": true
+  },
+  "capabilities": {
+    "pane_spawn": {
+      "enabled": true,
+      "description": "Initialize a new sandbox terminal worker context"
+    },
+    "pane_write": {
+      "enabled": true,
+      "allowedPaths": ["./src/**/*", "./tests/**/*"]
+    },
+    "pane_read": {
+      "enabled": true,
+      "isolationLevel": "workspace-root"
+    },
+    "pane_wait_idle": {
+      "timeoutMs": 45000
+    }
+  },
+  "automationSweeps": {
+    "testRunnerCommand": "npm run test:agent-sweep",
+    "autoRefactorTarget": "./src/core/transformers"
+  }
+}
