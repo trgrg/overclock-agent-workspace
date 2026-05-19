@@ -7,3 +7,24 @@ A high-throughput backend development workspace designed around parallelized LLM
 ## Architecture & Workflow
 
 This project is actively maintained and built using a multi-pane parallel agent orchestration layout. Heavy-lifting tasks, bulk file refactors, and multi-file test coverage loops are distributed across worker runtimes using MiMo processing endpoints, coordinated via an orchestrator pane.
+
+┌────────────────────────┐
+              │   Orchestrator Pane   │
+              │       (Opus 4.7)       │
+              └───────────┬────────────┘
+                          │ (Custom MCP Server)
+     ┌────────────────────┼────────────────────┐
+     ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  Worker Pane 1  │  │  Worker Pane 2  │  │  Worker Pane N  │
+│ (MiMo V Pro)    │  │ (MiMo V Pro)    │  │ (MiMo V Pro)    │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+
+
+### Core Workspace Modules
+* `/src/core` — Core application engine state machines.
+* `/src/mcp` — Workspace agent configuration hook scripts.
+* `/tests/automated` — Auto-generated unit and regression test sweeps.
+
+## Local Configuration
+Agent workspace boundaries are defined within local workspace attributes. See `.mcp/workspace-config.
