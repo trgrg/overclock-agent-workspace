@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lua Env Logger / Deobfuscator</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1f242c;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --good: #3fb950;
+    --warn: #d29922;
+    --bad:  #f85149;
+    --border: #30363d;
+    --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+  }
+  header h1 .sub { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    background: var(--bg3);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    margin-left: 8px;
+  }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 10px 14px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .panel-body { padding: 0; }
+
+  textarea {
+    width: 100%;
+    min-height: 380px;
+    background: var(--bg);
+    color: var(--fg);
+    border: 0;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    resize: vertical;
+    outline: none;
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  button {
+    background: var(--accent);
+    color: #0d1117;
+    border: 0;
+    padding: 7px 14px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: var(--bg2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  label { font-size: 12px; color: var(--muted); }
+  input[type=number] {
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    border-radius: 4px;
+    width: 80px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  input[type=checkbox] { accent-color: var(--accent); }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  .tab {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    user-select: none;
+  }
+  .tab.active { color: var(--fg); border-bottom-color: var(--accent); background: var(--bg2); }
+  .tab .count {
+    background: var(--bg);
+    color: var(--muted);
+    padding: 0 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    margin-left: 6px;
+  }
+  .tab.active .count { color: var(--fg); }
+
+  .tab-content { display: none; padding: 14px; max-height: 600px; overflow: auto; }
+  .tab-content.active { display: block; }
+
+  pre, code { font-family: var(--mono); font-size: 12px; }
+  pre {
+    background: var(--bg);
+    padding: 10px;
+    border-radius: 4px;
+    overflow: auto;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    border: 1px solid var(--border);
+  }
+
+  .layer {
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .layer.deepest {
+    border-color: var(--good);
+    box-shadow: 0 0 0 1px rgba(63, 185, 80, 0.3);
+  }
+  .layer-header {
+    padding: 8px 12px;
+    background: var(--bg3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .layer.deepest .layer-header { background: rgba(63, 185, 80, 0.12); }
+  .layer-header .meta { color: var(--muted); }
+  .layer-header .label-good { color: var(--good); font-weight: 600; }
+  .layer-body {
+    display: none;
+    padding: 0;
+    border-top: 1px solid var(--border);
+  }
+  .layer.open .layer-body { display: block; }
+  .layer-body pre { border: 0; border-radius: 0; max-height: 360px; }
+
+  .copy-btn {
+    background: var(--bg2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-left: 8px;
+  }
+  .copy-btn:hover { border-color: var(--accent); }
+
+  .log-line { font-family: var(--mono); font-size: 11px; padding: 1px 0; color: var(--fg); white-space: pre-wrap; word-break: break-all; }
+  .log-line.GET { color: #79c0ff; }
+  .log-line.SET { color: #d2a8ff; }
+  .log-line.CALL { color: #ffa657; }
+  .log-line.LOADSTRING { color: var(--good); font-weight: 600; }
+  .log-line.PRINT { color: var(--muted); }
+
+  .string-row {
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    margin-bottom: 4px;
+    font-family: var(--mono);
+    font-size: 12px;
+    word-break: break-all;
+    white-space: pre-wrap;
+  }
+
+  .status {
+    padding: 8px 14px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  .status.ok   { color: var(--good); }
+  .status.err  { color: var(--bad); }
+  .status.warn { color: var(--warn); }
+  .status.idle { color: var(--muted); }
+
+  .empty { color: var(--muted); font-style: italic; padding: 20px; text-align: center; }
+  .err-box { color: var(--bad); padding: 8px; background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.3); border-radius: 4px; margin-bottom: 8px; }
+  .info-box { color: var(--muted); padding: 8px 12px; background: var(--bg); border-left: 3px solid var(--accent); margin-bottom: 12px; font-size: 12px; }
+  footer { padding: 16px 24px; color: var(--muted); font-size: 12px; text-align: center; border-top: 1px solid var(--border); margin-top: 32px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Lua Env Logger <span class="sub">/ in-browser deobfuscation sandbox</span></h1>
+  <div>
+    <span class="badge" id="vm-status">VM: loading...</span>
+    <span class="badge">Fengari Lua 5.3</span>
+  </div>
+</header>
+
+<main>
+  <div class="info-box">
+    Paste an obfuscated Lua script (WeAreDevs, MoonSec V1/V2, Luraph, Ironbrew, Psu, etc.). The page runs it inside a sandboxed
+    fake Roblox environment with hooked <code>loadstring</code>/<code>load</code>/<code>string.char</code>/<code>table.concat</code>.
+    Each <code>loadstring</code> layer is captured &mdash; the deepest layer is usually the original source.
+    MoonSec V3 / Luraph-VM use Luau-only features and a custom interpreter; you'll get behavioral logs and string dumps but not always a clean source dump.
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-header">
+        <span>Obfuscated input</span>
+        <span class="meta" id="input-stats" style="color:var(--muted); font-weight:400; font-size: 11px;">0 chars</span>
+      </div>
+      <div class="panel-body">
+        <textarea id="input" spellcheck="false" placeholder="-- paste obfuscated Lua script here&#10;-- e.g. local v0=(function(...) ...long mess... end)(...)"></textarea>
+      </div>
+      <div class="controls">
+        <button id="run">Analyze</button>
+        <button id="clear" class="secondary">Clear</button>
+        <button id="sample" class="secondary">Load sample</button>
+        <span style="flex:1"></span>
+        <label>Step limit: <input id="steplimit" type="number" value="20000000"></label>
+        <label><input type="checkbox" id="capture-strings" checked> Capture strings</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span>Analysis result</span>
+        <span id="duration" style="color:var(--muted); font-weight:400; font-size: 11px;"></span>
+      </div>
+      <div class="status idle" id="status">Idle. Paste a script and click Analyze.</div>
+      <div class="tabs">
+        <div class="tab active" data-tab="layers">Layers <span class="count" id="count-layers">0</span></div>
+        <div class="tab" data-tab="trace">Call trace <span class="count" id="count-trace">0</span></div>
+        <div class="tab" data-tab="strings">Strings <span class="count" id="count-strings">0</span></div>
+        <div class="tab" data-tab="calls">API calls <span class="count" id="count-calls">0</span></div>
+        <div class="tab" data-tab="errors">Errors <span class="count" id="count-errors">0</span></div>
+      </div>
+      <div class="tab-content active" data-tab="layers">
+        <div id="layers" class="empty">No layers captured yet.</div>
+      </div>
+      <div class="tab-content" data-tab="trace">
+        <div id="trace" class="empty">No trace yet.</div>
+      </div>
+      <div class="tab-content" data-tab="strings">
+        <div id="strings" class="empty">No strings captured yet.</div>
+      </div>
+      <div class="tab-content" data-tab="calls">
+        <div id="calls" class="empty">No API calls captured yet.</div>
+      </div>
+      <div class="tab-content" data-tab="errors">
+        <div id="errors" class="empty">No errors.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Lua VM via <a href="https://fengari.io" style="color:var(--accent)">Fengari</a>. Everything runs in your browser, nothing is sent to a server.
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/fengari-web@0.1.4/dist/fengari-web.js"></script>
+<script>
+// ============================================================
+// Lua prelude  (runs inside Fengari, builds sandbox + executes user source)
+// ============================================================
+const PRELUDE = String.raw`
+-- =========================================================
+-- Lua Env Logger Prelude
+-- =========================================================
+local USER_SOURCE = _USER_SOURCE or ""
+local STEP_LIMIT  = tonumber(_STEP_LIMIT) or 20000000
+local CAPTURE_STR = _CAPTURE_STRINGS
+
+local _RESULT = {
+  log     = {},   -- chronological events
+  layers  = {},   -- captured loadstring/load chunks
+  strings = {},   -- captured deobfuscated strings
+  calls   = {},   -- API call summary { path, count }
+  errors  = {},   -- compile/runtime errors
+  printed = {},   -- print() / warn() output
+}
+
+local call_counts = {}
+
+local function log(kind, line)
+  _RESULT.log[#_RESULT.log + 1] = { kind = kind, line = line }
+end
+
+local function record_call(path)
+  call_counts[path] = (call_counts[path] or 0) + 1
+end
+
+-- =========================================================
+-- Recursive proxy for fake Roblox objects
+-- =========================================================
+local make_proxy
+local proxy_marker = {}
+
+make_proxy = function(name, depth)
+  depth = depth or 0
+  if depth > 10 then return nil end
+  local p = setmetatable({}, {
+    __index = function(_, k)
+      local key = tostring(k)
+      log("GET", name .. "." .. key)
+      -- Common method calls return self-call proxies
+      return make_proxy(name .. "." .. key, depth + 1)
+    end,
+    __newindex = function(_, k, v)
+      log("SET", name .. "." .. tostring(k) .. " = " .. tostring(v))
+    end,
+    __call = function(_, ...)
+      local n = select("#", ...)
+      local parts = {}
+      for i = 1, n do
+        local a = select(i, ...)
+        local s = tostring(a)
+        if #s > 80 then s = s:sub(1, 80) .. "..." end
+        parts[i] = s
+      end
+      log("CALL", name .. "(" .. table.concat(parts, ", ") .. ")")
+      record_call(name)
+      return make_proxy(name .. "()", depth + 1)
+    end,
+    __tostring = function() return "<proxy:" .. name .. ">" end,
+    __concat = function(a, b) return tostring(a) .. tostring(b) end,
+    __eq = function(a, b) return rawequal(a, b) end,
+    __metatable = proxy_marker,
+  })
+  return p
+end
+
+-- =========================================================
+-- Build sandbox environment
+-- =========================================================
+local sandbox = {}
+
+-- Roblox globals
+sandbox.game      = make_proxy("game")
+sandbox.workspace = make_proxy("workspace")
+sandbox.Workspace = sandbox.workspace
+sandbox.script    = make_proxy("script")
+sandbox.shared    = {}
+sandbox.plugin    = make_proxy("plugin")
+sandbox.owner     = make_proxy("owner")
+
+-- Self refs
+sandbox._G   = sandbox
+sandbox._ENV = sandbox
+
+-- Constructors
+sandbox.Instance = setmetatable({}, {
+  __index = function(_, k)
+    if k == "new" then
+      return function(class, parent)
+        log("CALL", "Instance.new(" .. tostring(class) .. ")")
+        record_call("Instance.new")
+        return make_proxy("Instance<" .. tostring(class) .. ">")
+      end
+    end
+  end,
+})
+
+local function vec_ctor(name)
+  return setmetatable({}, {
+    __index = function(_, k)
+      if k == "new" then
+        return function(...)
+          local a = {...}
+          log("CALL", name .. ".new(" .. tostring(a[1]) .. "," .. tostring(a[2]) .. "," .. tostring(a[3]) .. ")")
+          return make_proxy(name)
+        end
+      end
+      return make_proxy(name .. "." .. k)
+    end,
+    __call = function(_, ...) return make_proxy(name) end,
+  })
+end
+sandbox.Vector3   = vec_ctor("Vector3")
+sandbox.Vector2   = vec_ctor("Vector2")
+sandbox.CFrame    = vec_ctor("CFrame")
+sandbox.UDim      = vec_ctor("UDim")
+sandbox.UDim2     = vec_ctor("UDim2")
+sandbox.Color3    = vec_ctor("Color3")
+sandbox.BrickColor = vec_ctor("BrickColor")
+sandbox.Ray       = vec_ctor("Ray")
+sandbox.Region3   = vec_ctor("Region3")
+sandbox.Rect      = vec_ctor("Rect")
+sandbox.NumberRange = vec_ctor("NumberRange")
+sandbox.NumberSequence = vec_ctor("NumberSequence")
+sandbox.ColorSequence  = vec_ctor("ColorSequence")
+sandbox.TweenInfo = vec_ctor("TweenInfo")
+sandbox.Enum      = make_proxy("Enum")
+
+-- task / wait / spawn
+sandbox.task = {
+  wait   = function(t) log("CALL", "task.wait(" .. tostring(t) .. ")"); return t or 0 end,
+  spawn  = function(f, ...)
+    log("CALL", "task.spawn")
+    if type(f) == "function" then pcall(f, ...) end
+  end,
+  defer  = function(f, ...)
+    log("CALL", "task.defer")
+    if type(f) == "function" then pcall(f, ...) end
+  end,
+  delay  = function(t, f, ...)
+    log("CALL", "task.delay(" .. tostring(t) .. ")")
+    if type(f) == "function" then pcall(f, ...) end
+  end,
+  cancel = function() log("CALL", "task.cancel") end,
+  synchronize   = function() end,
+  desynchronize = function() end,
+}
+sandbox.wait  = function(t) log("CALL", "wait(" .. tostring(t) .. ")"); return t or 0, 0 end
+sandbox.spawn = function(f, ...)
+  log("CALL", "spawn")
+  if type(f) == "function" then pcall(f, ...) end
+end
+sandbox.delay = function(t, f, ...)
+  log("CALL", "delay(" .. tostring(t) .. ")")
+  if type(f) == "function" then pcall(f, ...) end
+end
+sandbox.tick = function() return os.time() end
+sandbox.time = function() return os.time() end
+sandbox.elapsedTime = function() return 0 end
+
+-- Output
+sandbox.print = function(...)
+  local n = select("#", ...)
+  local parts = {}
+  for i = 1, n do parts[i] = tostring((select(i, ...))) end
+  local s = table.concat(parts, "\t")
+  _RESULT.printed[#_RESULT.printed + 1] = s
+  log("PRINT", "print: " .. s)
+end
+sandbox.warn = function(...)
+  local n = select("#", ...)
+  local parts = {}
+  for i = 1, n do parts[i] = tostring((select(i, ...))) end
+  log("PRINT", "warn: " .. table.concat(parts, "\t"))
+end
+sandbox.error  = error
+sandbox.assert = assert
+
+-- Stdlib passthrough (with hooks)
+sandbox.string  = setmetatable({}, { __index = string })
+sandbox.table   = setmetatable({}, { __index = table })
+sandbox.math    = setmetatable({}, { __index = math })
+sandbox.os      = { time = os.time, clock = os.clock, date = os.date, difftime = os.difftime }
+sandbox.coroutine = coroutine
+sandbox.bit32     = bit32 or rawget(_G, "bit32")
+
+sandbox.tonumber = tonumber
+sandbox.tostring = tostring
+sandbox.type     = type
+sandbox.typeof   = function(v)
+  local t = type(v)
+  if t == "table" and getmetatable(v) == proxy_marker then return "Instance" end
+  return t
+end
+sandbox.ipairs   = ipairs
+sandbox.pairs    = pairs
+sandbox.next     = next
+sandbox.select   = select
+sandbox.unpack   = table.unpack or unpack
+sandbox.pcall    = pcall
+sandbox.xpcall   = xpcall
+sandbox.setmetatable = setmetatable
+sandbox.getmetatable = getmetatable
+sandbox.rawget   = rawget
+sandbox.rawset   = rawset
+sandbox.rawequal = rawequal
+sandbox.rawlen   = rawlen or function(t) return #t end
+sandbox.collectgarbage = function() return 0 end
+sandbox.require  = function(m) log("CALL", "require(" .. tostring(m) .. ")"); return make_proxy("require<" .. tostring(m) .. ">") end
+
+-- =========================================================
+-- Hook string.char + table.concat (capture deobfuscated strings)
+-- =========================================================
+local orig_char  = string.char
+local orig_byte  = string.byte
+local orig_concat = table.concat
+local orig_sub   = string.sub
+local orig_rep   = string.rep
+local orig_format = string.format
+
+local function is_printable(s)
+  if #s < 4 then return false end
+  local printable = 0
+  for i = 1, #s do
+    local b = orig_byte(s, i)
+    if (b >= 32 and b <= 126) or b == 9 or b == 10 or b == 13 then
+      printable = printable + 1
+    end
+  end
+  return (printable / #s) > 0.9
+end
+
+local seen_strings = {}
+local function maybe_capture(s)
+  if not CAPTURE_STR then return end
+  if type(s) ~= "string" then return end
+  if #s < 4 or #s > 50000 then return end
+  if seen_strings[s] then return end
+  if not is_printable(s) then return end
+  seen_strings[s] = true
+  _RESULT.strings[#_RESULT.strings + 1] = s
+end
+
+sandbox.string.char = function(...)
+  local ok, s = pcall(orig_char, ...)
+  if ok then maybe_capture(s); return s end
+  error(s, 2)
+end
+
+sandbox.table.concat = function(t, sep, i, j)
+  local ok, s = pcall(orig_concat, t, sep, i, j)
+  if ok then
+    if type(t) == "table" and #t >= 2 then maybe_capture(s) end
+    return s
+  end
+  error(s, 2)
+end
+
+sandbox.string.format = function(fmt, ...)
+  local ok, s = pcall(orig_format, fmt, ...)
+  if ok then maybe_capture(s); return s end
+  error(s, 2)
+end
+
+-- =========================================================
+-- The big hook: load / loadstring  (capture every layer)
+-- =========================================================
+local orig_load = load
+local layer_n = 0
+
+local function hooked_load(chunk, chunkname, mode, env)
+  -- chunk can be string OR function (returns string repeatedly until nil)
+  local source
+  if type(chunk) == "string" then
+    source = chunk
+  elseif type(chunk) == "function" then
+    local pieces = {}
+    while true do
+      local ok, piece = pcall(chunk)
+      if not ok or piece == nil or piece == "" then break end
+      pieces[#pieces + 1] = piece
+      if #pieces > 200 then break end
+    end
+    source = table.concat(pieces)
+  else
+    return orig_load(chunk, chunkname, mode, env or sandbox)
+  end
+
+  layer_n = layer_n + 1
+  local entry = {
+    n       = layer_n,
+    name    = chunkname or ("layer_" .. layer_n),
+    length  = #source,
+    source  = source,
+    preview = source:sub(1, 240),
+  }
+  _RESULT.layers[#_RESULT.layers + 1] = entry
+  log("LOADSTRING", "layer=" .. layer_n .. " name=" .. tostring(entry.name) .. " len=" .. #source)
+
+  -- Run loaded chunk inside our sandbox
+  return orig_load(source, chunkname or ("layer_" .. layer_n), mode or "t", env or sandbox)
+end
+
+sandbox.load       = hooked_load
+sandbox.loadstring = hooked_load
+sandbox.dofile     = function() error("dofile blocked") end
+sandbox.loadfile   = function() error("loadfile blocked") end
+
+-- 5.1 compat shims
+sandbox.getfenv = function(level) return sandbox end
+sandbox.setfenv = function(fn, env) return fn end
+sandbox.newproxy = function(b)
+  if b then return setmetatable({}, {}) end
+  return {}
+end
+
+-- Mini debug stub (some obfuscators read debug.getinfo)
+sandbox.debug = {
+  traceback = function(msg) return tostring(msg or "") end,
+  getinfo   = function() return { source = "=[C]", currentline = -1, what = "C" } end,
+  sethook   = function() end,
+  gethook   = function() end,
+  getlocal  = function() return nil end,
+  setlocal  = function() return nil end,
+  getupvalue = function() return nil end,
+  setupvalue = function() return nil end,
+  upvaluejoin = function() end,
+  upvalueid   = function() return 0 end,
+}
+
+-- =========================================================
+-- Execute user source inside sandbox with step-counter timeout
+-- =========================================================
+local fn, err = orig_load(USER_SOURCE, "obfuscated", "t", sandbox)
+if not fn then
+  _RESULT.errors[#_RESULT.errors + 1] = "compile: " .. tostring(err)
+else
+  local steps = 0
+  debug.sethook(function()
+    steps = steps + 1
+    if steps > STEP_LIMIT / 1000 then
+      error("EXEC_STEP_LIMIT")
+    end
+  end, "", 1000)
+
+  local ok, runtime_err = pcall(fn)
+  debug.sethook()
+
+  if not ok then
+    _RESULT.errors[#_RESULT.errors + 1] = "runtime: " .. tostring(runtime_err)
+  end
+end
+
+-- Build call summary
+for path, n in pairs(call_counts) do
+  _RESULT.calls[#_RESULT.calls + 1] = { path = path, count = n }
+end
+table.sort(_RESULT.calls, function(a, b) return a.count > b.count end)
+
+-- =========================================================
+-- JSON encode for return to JS
+-- =========================================================
+local function json_encode(v, depth)
+  depth = depth or 0
+  if depth > 64 then return '"<too-deep>"' end
+  local t = type(v)
+  if t == "nil" then return "null"
+  elseif t == "boolean" then return v and "true" or "false"
+  elseif t == "number" then
+    if v ~= v or v == math.huge or v == -math.huge then return "null" end
+    return tostring(v)
+  elseif t == "string" then
+    local s = v:gsub('\\', '\\\\'):gsub('"', '\\"'):gsub('\n', '\\n'):gsub('\r', '\\r'):gsub('\t', '\\t')
+    s = s:gsub('[%z\1-\8\11\12\14-\31]', function(c)
+      return string.format('\\u%04x', string.byte(c))
+    end)
+    return '"' .. s .. '"'
+  elseif t == "table" then
+    local n = 0
+    for _ in pairs(v) do n = n + 1 end
+    local arr_len = #v
+    if arr_len == n and arr_len > 0 then
+      local parts = {}
+      for i = 1, arr_len do parts[i] = json_encode(v[i], depth + 1) end
+      return "[" .. table.concat(parts, ",") .. "]"
+    elseif n == 0 then
+      return "[]"
+    else
+      local parts = {}
+      for k, val in pairs(v) do
+        parts[#parts+1] = json_encode(tostring(k), depth + 1) .. ":" .. json_encode(val, depth + 1)
+      end
+      return "{" .. table.concat(parts, ",") .. "}"
+    end
+  else
+    return '"<' .. t .. '>"'
+  end
+end
+
+_RESULT_JSON = json_encode(_RESULT)
+`;
+
+// ============================================================
+// JS bridge
+// ============================================================
+const $ = (id) => document.getElementById(id);
+const vmStatus = $('vm-status');
+
+function waitForFengari() {
+  return new Promise((resolve, reject) => {
+    if (window.fengari) { resolve(); return; }
+    const start = Date.now();
+    const t = setInterval(() => {
+      if (window.fengari) { clearInterval(t); resolve(); }
+      else if (Date.now() - start > 8000) { clearInterval(t); reject(new Error("Fengari failed to load")); }
+    }, 50);
+  });
+}
+
+waitForFengari().then(() => {
+  vmStatus.textContent = "VM: ready";
+  vmStatus.style.color = "var(--good)";
+}).catch(e => {
+  vmStatus.textContent = "VM: failed";
+  vmStatus.style.color = "var(--bad)";
+});
+
+async function analyze(source, opts) {
+  const { lua, lauxlib, lualib, to_luastring, to_jsstring } = window.fengari;
+  const L = lauxlib.luaL_newstate();
+  lualib.luaL_openlibs(L);
+
+  // _USER_SOURCE
+  lua.lua_pushstring(L, to_luastring(source));
+  lua.lua_setglobal(L, to_luastring("_USER_SOURCE"));
+  // _STEP_LIMIT
+  lua.lua_pushnumber(L, opts.stepLimit);
+  lua.lua_setglobal(L, to_luastring("_STEP_LIMIT"));
+  // _CAPTURE_STRINGS
+  lua.lua_pushboolean(L, opts.captureStrings ? 1 : 0);
+  lua.lua_setglobal(L, to_luastring("_CAPTURE_STRINGS"));
+
+  const status = lauxlib.luaL_dostring(L, to_luastring(PRELUDE));
+  if (status !== lua.LUA_OK) {
+    const err = to_jsstring(lua.lua_tostring(L, -1));
+    lua.lua_close(L);
+    return { fatal: "Prelude failure: " + err };
+  }
+
+  lua.lua_getglobal(L, to_luastring("_RESULT_JSON"));
+  if (!lua.lua_isstring(L, -1)) {
+    lua.lua_close(L);
+    return { fatal: "Prelude returned no result" };
+  }
+  const jsonStr = to_jsstring(lua.lua_tostring(L, -1));
+  lua.lua_close(L);
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    return { fatal: "JSON parse failure: " + e.message, raw: jsonStr.slice(0, 500) };
+  }
+}
+
+// ============================================================
+// UI
+// ============================================================
+const inputEl = $('input');
+inputEl.addEventListener('input', () => {
+  $('input-stats').textContent = inputEl.value.length.toLocaleString() + ' chars';
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const t = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === t));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.toggle('active', x.dataset.tab === t));
+  });
+});
+
+$('clear').addEventListener('click', () => {
+  inputEl.value = '';
+  inputEl.dispatchEvent(new Event('input'));
+  setStatus('idle', 'Idle.');
+  renderResult({ layers: [], log: [], strings: [], calls: [], errors: [], printed: [] });
+  $('duration').textContent = '';
+});
+
+$('sample').addEventListener('click', () => {
+  inputEl.value = SAMPLE_OBFUSCATED;
+  inputEl.dispatchEvent(new Event('input'));
+});
+
+$('run').addEventListener('click', async () => {
+  const src = inputEl.value;
+  if (!src.trim()) { setStatus('warn', 'No input.'); return; }
+  if (!window.fengari) { setStatus('err', 'VM not ready yet.'); return; }
+
+  $('run').disabled = true;
+  setStatus('warn', 'Running...');
+
+  const opts = {
+    stepLimit: parseInt($('steplimit').value, 10) || 20000000,
+    captureStrings: $('capture-strings').checked,
+  };
+
+  const t0 = performance.now();
+  let result;
+  try {
+    result = await new Promise(resolve => {
+      // Yield to UI thread
+      setTimeout(async () => resolve(await analyze(src, opts)), 30);
+    });
+  } catch (e) {
+    result = { fatal: e.message };
+  }
+  const dt = (performance.now() - t0).toFixed(0);
+  $('duration').textContent = dt + ' ms';
+  $('run').disabled = false;
+
+  if (result.fatal) {
+    setStatus('err', result.fatal);
+    renderResult({ layers: [], log: [], strings: [], calls: [], errors: [{ msg: result.fatal }], printed: [] });
+    return;
+  }
+
+  const layerCount = result.layers ? result.layers.length : 0;
+  const errCount = result.errors ? result.errors.length : 0;
+  if (errCount > 0 && layerCount === 0) {
+    setStatus('err', `Failed: ${result.errors[0]}`);
+  } else if (errCount > 0) {
+    setStatus('warn', `Captured ${layerCount} layer(s) before error: ${result.errors[0]}`);
+  } else {
+    setStatus('ok', `OK. Captured ${layerCount} layer(s), ${result.strings.length} string(s), ${result.log.length} events.`);
+  }
+
+  renderResult(result);
+});
+
+function setStatus(kind, msg) {
+  const el = $('status');
+  el.className = 'status ' + kind;
+  el.textContent = msg;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderResult(r) {
+  // Counts
+  $('count-layers').textContent  = (r.layers || []).length;
+  $('count-trace').textContent   = (r.log || []).length;
+  $('count-strings').textContent = (r.strings || []).length;
+  $('count-calls').textContent   = (r.calls || []).length;
+  $('count-errors').textContent  = (r.errors || []).length;
+
+  // Layers
+  const layersEl = $('layers');
+  if (!r.layers || r.layers.length === 0) {
+    layersEl.className = 'empty';
+    layersEl.innerHTML = 'No <code>loadstring</code>/<code>load</code> layers were captured.';
+  } else {
+    layersEl.className = '';
+    const deepestIdx = r.layers.length - 1;
+    layersEl.innerHTML = r.layers.map((L, i) => `
+      <div class="layer ${i === deepestIdx ? 'deepest' : ''}" data-idx="${i}">
+        <div class="layer-header">
+          <span>
+            <strong>Layer ${L.n}</strong>
+            <span class="meta"> &middot; ${L.length.toLocaleString()} bytes &middot; ${escapeHtml(L.name || '')}</span>
+            ${i === deepestIdx ? '<span class="label-good"> &middot; deepest (likely original source)</span>' : ''}
+          </span>
+          <span>
+            <button class="copy-btn" data-copy="${i}">Copy</button>
+            <button class="copy-btn" data-download="${i}">Download</button>
+          </span>
+        </div>
+        <div class="layer-body"><pre>${escapeHtml(L.source)}</pre></div>
+      </div>
+    `).join('');
+
+    layersEl.querySelectorAll('.layer-header').forEach(h => {
+      h.addEventListener('click', (e) => {
+        if (e.target.classList.contains('copy-btn')) return;
+        h.parentElement.classList.toggle('open');
+      });
+    });
+    layersEl.querySelectorAll('[data-copy]').forEach(b => {
+      b.addEventListener('click', () => {
+        const idx = +b.dataset.copy;
+        navigator.clipboard.writeText(r.layers[idx].source);
+        b.textContent = 'Copied';
+        setTimeout(() => b.textContent = 'Copy', 1200);
+      });
+    });
+    layersEl.querySelectorAll('[data-download]').forEach(b => {
+      b.addEventListener('click', () => {
+        const idx = +b.dataset.download;
+        const blob = new Blob([r.layers[idx].source], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `layer_${r.layers[idx].n}.lua`;
+        a.click();
+      });
+    });
+    // Auto-open deepest
+    const deepest = layersEl.querySelector(`.layer[data-idx="${deepestIdx}"]`);
+    if (deepest) deepest.classList.add('open');
+  }
+
+  // Trace
+  const traceEl = $('trace');
+  if (!r.log || r.log.length === 0) {
+    traceEl.className = 'empty';
+    traceEl.textContent = 'No trace events.';
+  } else {
+    traceEl.className = '';
+    traceEl.innerHTML = r.log.map(ev =>
+      `<div class="log-line ${escapeHtml(ev.kind)}">[${escapeHtml(ev.kind)}] ${escapeHtml(ev.line)}</div>`
+    ).join('');
+  }
+
+  // Strings
+  const stringsEl = $('strings');
+  if (!r.strings || r.strings.length === 0) {
+    stringsEl.className = 'empty';
+    stringsEl.textContent = 'No strings captured.';
+  } else {
+    stringsEl.className = '';
+    stringsEl.innerHTML = r.strings.map(s =>
+      `<div class="string-row">${escapeHtml(s)}</div>`
+    ).join('');
+  }
+
+  // Calls
+  const callsEl = $('calls');
+  if (!r.calls || r.calls.length === 0) {
+    callsEl.className = 'empty';
+    callsEl.textContent = 'No API calls.';
+  } else {
+    callsEl.className = '';
+    callsEl.innerHTML = '<table style="width:100%; border-collapse:collapse;">' +
+      r.calls.map(c =>
+        `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:4px 8px; font-family:var(--mono); font-size:12px;">${escapeHtml(c.path)}</td>
+          <td style="padding:4px 8px; text-align:right; color:var(--muted); font-family:var(--mono); font-size:12px;">${c.count}&times;</td>
+        </tr>`
+      ).join('') + '</table>';
+  }
+
+  // Errors
+  const errEl = $('errors');
+  if (!r.errors || r.errors.length === 0) {
+    errEl.className = 'empty';
+    errEl.textContent = 'No errors.';
+  } else {
+    errEl.className = '';
+    errEl.innerHTML = r.errors.map(e => `<div class="err-box">${escapeHtml(typeof e === 'string' ? e : e.msg || JSON.stringify(e))}</div>`).join('');
+  }
+}
+
+// ============================================================
+// Built-in sample (3-layer loadstring obfuscation)
+// ============================================================
+const SAMPLE_OBFUSCATED = [
+  '-- Sample: 3 layers of loadstring + string.char obfuscation',
+  'local layer3 = string.char(112,114,105,110,116,40,34,72,101,108,108,111,32,102,114,111,109,32,116,104,101,32,111,114,105,103,105,110,97,108,32,115,111,117,114,99,101,33,34,41,10,103,97,109,101,46,80,108,97,121,101,114,115,46,76,111,99,97,108,80,108,97,121,101,114,46,67,104,97,114,97,99,116,101,114,46,72,117,109,97,110,111,105,100,46,87,97,108,107,83,112,101,101,100,32,61,32,49,48,48)',
+  'local layer2 = "loadstring(" .. string.format("%q", layer3) .. ")()"',
+  'local layer1 = "loadstring(" .. string.format("%q", layer2) .. ")()"',
+  'loadstring(layer1)()'
+].join('\n');
+</script>
+</body>
+</html>
